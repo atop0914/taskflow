@@ -3,8 +3,8 @@ module grpc-hello
 go 1.22.2
 
 require (
-	github.com/fvbock/endless v0.0.0-20170109170031-447134032cb6
 	github.com/gin-gonic/gin v1.9.1
+	github.com/google/uuid v1.6.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.7.1
 	github.com/prometheus/client_golang v1.11.1
 	google.golang.org/genproto v0.0.0-20211129164237-f09f9a12af12
