@@ -121,7 +121,7 @@ func (s *GreetingService) UpdateStats(name string) {
 	s.lastReq = time.Now()
 }
 
-// GetStats 获取统计信息
+// GetStats 获取统计信息（优化版 - 预分配map大小）
 func (s *GreetingService) GetStats(nameFilter string, limit int) (totalReq, uniqueNames int32, nameFreq map[string]int32, lastReq int64) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -130,34 +130,70 @@ func (s *GreetingService) GetStats(nameFilter string, limit int) (totalReq, uniq
 	uniqueNames = int32(len(s.uniqueNames))
 	lastReq = s.lastReq.Unix()
 
-	// Filter and sort
-	freq := make(map[string]int32)
-	for name, count := range s.nameFreq {
-		if nameFilter == "" || strings.Contains(name, nameFilter) {
-			freq[name] = int32(count)
+	// 预计算过滤后的结果数量，避免重复分配
+	filteredCount := 0
+	if nameFilter == "" {
+		filteredCount = len(s.nameFreq)
+	} else {
+		for name := range s.nameFreq {
+			if strings.Contains(name, nameFilter) {
+				filteredCount++
+			}
 		}
 	}
 
-	// Sort by frequency
+	// 预分配map大小，减少内存重新分配
+	resultSize := filteredCount
+	if limit > 0 && limit < resultSize {
+		resultSize = limit
+	}
+	result := make(map[string]int32, resultSize)
+
+	// 如果不需要排序，直接返回过滤后的结果
+	if nameFilter == "" && (limit <= 0 || limit >= len(s.nameFreq)) {
+		for name, count := range s.nameFreq {
+			result[name] = int32(count)
+		}
+		return totalReq, uniqueNames, result, lastReq
+	}
+
+	// 需要排序的情况
 	type kv struct {
 		Key   string
 		Value int32
 	}
-	var sorted []kv
-	for k, v := range freq {
-		sorted = append(sorted, kv{k, v})
+	// 预分配切片大小
+	sorted := make([]kv, 0, filteredCount)
+	for name, count := range s.nameFreq {
+		if nameFilter == "" || strings.Contains(name, nameFilter) {
+			sorted = append(sorted, kv{name, int32(count)})
+		}
 	}
 
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Value > sorted[j].Value
-	})
+	// 快速排序（对于小数据集使用插入排序更高效）
+	const maxInsertionSortSize = 64
+	if len(sorted) <= maxInsertionSortSize {
+		for i := 1; i < len(sorted); i++ {
+			key := sorted[i]
+			j := i - 1
+			for j >= 0 && sorted[j].Value < key.Value {
+				sorted[j+1] = sorted[j]
+				j--
+			}
+			sorted[j+1] = key
+		}
+	} else {
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].Value > sorted[j].Value
+		})
+	}
 
-	// Limit results
-	if len(sorted) > limit {
+	// 限制结果数量
+	if len(sorted) > limit && limit > 0 {
 		sorted = sorted[:limit]
 	}
 
-	result := make(map[string]int32)
+	// 填充结果map
 	for _, kv := range sorted {
 		result[kv.Key] = kv.Value
 	}

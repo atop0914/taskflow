@@ -103,7 +103,7 @@ func RequestBodyLogger() gin.HandlerFunc {
 	}
 }
 
-// Timeout 超时控制中间件（优化版）
+// Timeout 超时控制中间件（优化版 - 修复goroutine泄漏）
 func Timeout(timeout time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 使用 context 实现超时控制
@@ -114,17 +114,32 @@ func Timeout(timeout time.Duration) gin.HandlerFunc {
 
 		done := make(chan struct{})
 		go func() {
+			defer close(done)
+			// 使用 defer 确保在函数退出时调用 c.Abort()
+			// 这样可以防止gin继续处理已取消的请求
+			defer func() {
+				if err := recover(); err != nil {
+					// 记录panic但不再传播
+					traceID := c.GetHeader("X-Request-ID")
+					log.Printf("[%s] Panic in timeout handler: %v", traceID, err)
+				}
+			}()
 			c.Next()
-			close(done)
 		}()
 
 		select {
 		case <-done:
 			// 请求正常完成
 		case <-ctx.Done():
-			// 超时
+			// 超时或上下文取消
 			traceID := c.GetHeader("X-Request-ID")
-			log.Printf("[%s] Request timeout after %v", traceID, timeout)
+			if ctx.Err() == context.DeadlineExceeded {
+				log.Printf("[%s] Request timeout after %v", traceID, timeout)
+			} else {
+				log.Printf("[%s] Request context cancelled", traceID)
+			}
+			// 终止当前请求的处理，防止goroutine泄漏
+			c.Abort()
 			c.AbortWithStatusJSON(504, gin.H{
 				"code":    504,
 				"message": "gateway timeout",

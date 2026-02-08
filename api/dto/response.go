@@ -2,32 +2,58 @@ package dto
 
 import "time"
 
+// ResponseVersion API响应版本，用于客户端兼容性检查
+const ResponseVersion = "1.0"
+
 // BaseResponse 基础响应结构
 type BaseResponse struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
-	TraceID string      `json:"trace_id,omitempty"`
-	Time    int64       `json:"time"`
+	Code     ErrorCode   `json:"code"`
+	Message  string      `json:"message"`
+	Data     interface{} `json:"data,omitempty"`
+	TraceID  string      `json:"trace_id,omitempty"`
+	Version  string      `json:"version,omitempty"`
+	Time     int64       `json:"time"`
 }
 
-// NewSuccessResponse 创建成功响应
-func NewSuccessResponse(data interface{}) *BaseResponse {
-	return &BaseResponse{
-		Code:    0,
+// NewSuccessResponse 创建成功响应（支持TraceID）
+func NewSuccessResponse(data interface{}, traceID ...string) *BaseResponse {
+	resp := &BaseResponse{
+		Code:    CodeSuccess,
 		Message: "success",
 		Data:    data,
+		Time:    time.Now().Unix(),
+	}
+	if len(traceID) > 0 && traceID[0] != "" {
+		resp.TraceID = traceID[0]
+		resp.Version = ResponseVersion
+	}
+	return resp
+}
+
+// NewSuccessResponseWithTrace 创建带TraceID的成功响应
+func NewSuccessResponseWithTrace(data interface{}, traceID string) *BaseResponse {
+	return &BaseResponse{
+		Code:    CodeSuccess,
+		Message: "success",
+		Data:    data,
+		TraceID: traceID,
+		Version: ResponseVersion,
 		Time:    time.Now().Unix(),
 	}
 }
 
 // NewErrorResponse 创建错误响应
-func NewErrorResponse(code int, message string) *BaseResponse {
-	return &BaseResponse{
-		Code:    code,
+func NewErrorResponse(code int, message string, traceID ...string) *BaseResponse {
+	resp := &BaseResponse{
+		Code:    ErrorCode(code),
 		Message: message,
 		Time:    time.Now().Unix(),
 	}
+	if len(traceID) > 0 && traceID[0] != "" {
+		resp.TraceID = traceID[0]
+		resp.Version = ResponseVersion
+	}
+	return resp
 }
 
 // HelloRequest 问候请求
