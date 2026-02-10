@@ -1,0 +1,119 @@
+syntax = "proto3";
+
+package taskflow;
+
+option go_package = "github.com/atop0914/taskflow/proto";
+
+// Task Service - 四种 RPC 模式
+service TaskService {
+  // Simple RPC: 创建任务
+  rpc CreateTask(CreateTaskRequest) returns (Task);
+  
+  // Simple RPC: 获取任务
+  rpc GetTask(GetTaskRequest) returns (Task);
+  
+  // Simple RPC: 批量获取任务
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
+  
+  // Simple RPC: 更新任务
+  rpc UpdateTask(UpdateTaskRequest) returns (Task);
+}
+
+// 任务状态枚举
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_PENDING = 1;
+  TASK_STATUS_RUNNING = 2;
+  TASK_STATUS_SUCCEEDED = 3;
+  TASK_STATUS_FAILED = 4;
+  TASK_STATUS_CANCELLED = 5;
+  TASK_STATUS_TIMEOUT = 6;
+}
+
+// 任务优先级枚举
+enum TaskPriority {
+  TASK_PRIORITY_UNSPECIFIED = 0;
+  TASK_PRIORITY_LOW = 1;
+  TASK_PRIORITY_NORMAL = 2;
+  TASK_PRIORITY_HIGH = 3;
+  TASK_PRIORITY_URGENT = 4;
+}
+
+// 任务实体
+message Task {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  TaskStatus status = 4;
+  TaskPriority priority = 5;
+  string task_type = 6;
+  map<string, string> input_params = 7;
+  map<string, string> output_result = 8;
+  repeated string dependencies = 9;
+  int32 retry_count = 10;
+  int32 max_retries = 11;
+  string error_message = 12;
+  int64 created_at = 13;
+  int64 updated_at = 14;
+  int64 started_at = 15;
+  int64 completed_at = 16;
+  string created_by = 17;
+  repeated TaskEvent events = 18;
+}
+
+// 任务状态变更事件
+message TaskEvent {
+  string id = 1;
+  TaskStatus from_status = 2;
+  TaskStatus to_status = 3;
+  string message = 4;
+  int64 timestamp = 5;
+  string operator = 6;
+}
+
+// 创建任务请求
+message CreateTaskRequest {
+  string name = 1;
+  string description = 2;
+  TaskPriority priority = 3;
+  string task_type = 4;
+  map<string, string> input_params = 5;
+  repeated string dependencies = 6;
+  int32 max_retries = 7;
+  string created_by = 8;
+}
+
+// 获取任务请求
+message GetTaskRequest {
+  string id = 1;
+  bool include_events = 2;
+}
+
+// 批量获取任务请求
+message ListTasksRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  repeated TaskStatus status_filter = 3;
+  string keyword = 4;
+  string task_type = 5;
+  TaskPriority priority = 6;
+  string sort_by = 7;
+  bool sort_desc = 8;
+}
+
+// 批量获取任务响应
+message ListTasksResponse {
+  repeated Task tasks = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// 更新任务请求
+message UpdateTaskRequest {
+  string id = 1;
+  TaskStatus status = 2;
+  map<string, string> output_result = 3;
+  string error_message = 4;
+  int32 retry_count = 5;
+}
