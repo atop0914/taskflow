@@ -81,6 +81,7 @@ func (s *Server) startHTTP() error {
 	}
 
 	router := gin.New()
+	router.RemoveExtraSlash = true
 	router.Use(
 		middleware.Recovery(),
 		middleware.Logger(),
@@ -175,7 +176,7 @@ func (s *Server) handleListTasks(c *gin.Context) {
 	pageSize := int32(parseInt(c.Query("page_size"), 20))
 	keyword := c.Query("keyword")
 	taskType := c.Query("type")
-	statusStr := c.Query("status")
+	statusVal := c.Query("status")
 	priorityStr := c.Query("priority")
 
 	req := &pb.ListTasksRequest{
@@ -185,8 +186,10 @@ func (s *Server) handleListTasks(c *gin.Context) {
 		TaskType: taskType,
 	}
 
-	if statusStr != "" {
-		req.StatusFilter = []pb.TaskStatus{pb.TaskStatus(parseInt(statusStr, 0))}
+	if statusVal != "" {
+		if v := parseInt(statusVal, -1); v > 0 {
+			req.StatusFilter = []pb.TaskStatus{pb.TaskStatus(v)}
+		}
 	}
 	if priorityStr != "" {
 		req.Priority = pb.TaskPriority(parseInt(priorityStr, 0))

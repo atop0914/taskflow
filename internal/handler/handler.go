@@ -1,5 +1,7 @@
 package handler
 
+import "log"
+
 import (
 	"context"
 	"fmt"
@@ -59,7 +61,7 @@ func (h *TaskHandler) GetTask(ctx context.Context, req *pb.GetTaskRequest) (*pb.
 	}
 
 	task, err := h.repo.GetByID(req.Id)
-	if err != nil {
+	if err != nil { log.Printf("Handler error: %v", err)
 		return nil, errorcode.NewTaskError(errorcode.ErrCodeDBError, err.Error()).ToGRPCStatus().Err()
 	}
 	if task == nil {
@@ -101,7 +103,7 @@ func (h *TaskHandler) ListTasks(ctx context.Context, req *pb.ListTasksRequest) (
 
 	// 查询
 	tasks, total, err := h.repo.ListByFilter(filter)
-	if err != nil {
+	if err != nil { log.Printf("Handler error: %v", err)
 		return nil, errorcode.NewTaskError(errorcode.ErrCodeDBError, err.Error()).ToGRPCStatus().Err()
 	}
 
@@ -127,7 +129,7 @@ func (h *TaskHandler) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest)
 
 	// 获取现有任务
 	task, err := h.repo.GetByID(req.Id)
-	if err != nil {
+	if err != nil { log.Printf("Handler error: %v", err)
 		return nil, errorcode.NewTaskError(errorcode.ErrCodeDBError, err.Error()).ToGRPCStatus().Err()
 	}
 	if task == nil {
@@ -147,7 +149,7 @@ func (h *TaskHandler) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest)
 
 		// 原子更新状态
 		err := h.repo.UpdateStatusWithEvent(req.Id, oldStatus, newStatus, "system", "status updated")
-		if err != nil {
+		if err != nil { log.Printf("Handler error: %v", err)
 			return nil, errorcode.NewTaskError(errorcode.ErrCodeDBError, err.Error()).ToGRPCStatus().Err()
 		}
 		task.Status = newStatus

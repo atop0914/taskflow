@@ -364,7 +364,8 @@ func (r *TaskRepository) Search(keyword string, limit, offset int) ([]*model.Tas
 func (r *TaskRepository) scanTask(row interface{ Scan(...interface{}) error }) (*model.Task, error) {
 	var task model.Task
 	var inputParams, outputResult, dependencies string
-	var createdAt, updatedAt, startedAt, completedAt string
+	var createdAt, updatedAt string
+	var startedAt, completedAt sql.NullString
 
 	err := row.Scan(
 		&task.ID,
@@ -392,11 +393,11 @@ func (r *TaskRepository) scanTask(row interface{ Scan(...interface{}) error }) (
 	task.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	task.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 
-	if startedAt != "" {
-		task.StartedAt, _ = parseTime(startedAt)
+	if startedAt.Valid {
+		task.StartedAt, _ = parseTime(startedAt.String)
 	}
-	if completedAt != "" {
-		task.CompletedAt, _ = parseTime(completedAt)
+	if completedAt.Valid {
+		task.CompletedAt, _ = parseTime(completedAt.String)
 	}
 
 	json.Unmarshal([]byte(inputParams), &task.InputParams)
