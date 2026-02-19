@@ -26,6 +26,9 @@ gRPC 任务调度服务。
 
 ```
 taskflow/
+├── cmd/
+│   ├── server/              # 服务入口
+│   └── grpc_client/         # gRPC 测试客户端
 ├── proto/
 │   ├── task.proto           # 服务定义
 │   ├── task.pb.go          # 生成的 Go 代码
@@ -71,7 +74,7 @@ buf generate
 # 构建项目
 go build -o taskflow .
 
-# 运行服务
+# 运行服务 (gRPC:8080, HTTP:8090)
 ./taskflow
 
 # 运行测试
@@ -85,7 +88,7 @@ go test ./...
 | 环境变量 | 描述 | 默认值 |
 |---------|------|--------|
 | GRPC_PORT | gRPC 端口 | 8080 |
-| HTTP_PORT | HTTP 端口 | 8090 |
+| HTTP_PORT | HTTP 网关端口 | 8090 |
 | DB_HOST | 数据库主机 | localhost |
 | DB_PORT | 数据库端口 | 5432 |
 | DB_NAME | 数据库名称 | taskflow |
@@ -207,9 +210,9 @@ go test ./...
 
 ### 9. Server 层 (internal/server/)
 
-gRPC/HTTP 服务器：
-- gRPC 服务端
-- HTTP 网关
+gRPC/HTTP 双服务器：
+- gRPC 服务端 (端口 8080)
+- HTTP 网关 (端口 8090)
 - 健康检查
 
 ### 10. Middleware 层 (internal/middleware/)
@@ -326,6 +329,12 @@ MIT
 ---
 
 ## 📌 更新日志
+
+### v0.3.0 (2026-02-19)
+- ✅ 添加 gRPC 服务器支持 (端口 8080)
+- ✅ HTTP 网关同时运行 (端口 8090)
+- ✅ 添加 gRPC 客户端测试工具 (cmd/grpc_client)
+- ✅ 完整的 gRPC 四种 RPC 模式测试覆盖
 
 ### v0.2.0 (2026-02-19)
 - ✅ Service 层实现
