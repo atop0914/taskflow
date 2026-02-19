@@ -29,7 +29,8 @@ taskflow/
 ├── proto/
 │   ├── task.proto           # 服务定义
 │   ├── task.pb.go          # 生成的 Go 代码
-│   └── task_grpc.pb.go     # 生成的 gRPC 代码
+│   ├── task_grpc.pb.go     # 生成的 gRPC 代码
+│   └── task_stream.go      # 流式处理
 ├── internal/
 │   ├── config/             # 配置管理 ✅ 已完成
 │   ├── model/              # 数据模型 ✅ 已完成
@@ -38,10 +39,10 @@ taskflow/
 │   ├── middleware/         # 中间件 ✅ 已完成
 │   ├── handler/            # gRPC Handler ✅ 已完成
 │   ├── server/             # 服务入口 ✅ 已完成
-│   ├── service/            # 业务逻辑层 ⏳ 待实现
-│   ├── scheduler/           # 任务调度 ⏳ 待实现
-│   ├── executor/           # 任务执行 ⏳ 待实现
-│   └── queue/              # 消息队列 ⏳ 待实现
+│   ├── service/            # 业务逻辑层 ✅ 已完成
+│   │   ├── task_service.go  # 任务服务
+│   │   ├── scheduler.go    # 任务调度器
+│   │   └── state_machine.go # 状态机
 ├── cmd/
 │   └── server/              # 服务入口
 └── scripts/                 # 工具脚本
@@ -81,22 +82,58 @@ go test ./...
 |---------|------|--------|
 | GRPC_PORT | gRPC 端口 | 8080 |
 | HTTP_PORT | HTTP 端口 | 8090 |
-| DB_* | 数据库配置 | 见下方 |
-| WORKER_COUNT | Worker 数量 | 4 |
-| MAX_RETRIES | 最大重试次数 | 3 |
-
-数据库配置：
-| 环境变量 | 描述 | 默认值 |
-|---------|------|--------|
 | DB_HOST | 数据库主机 | localhost |
 | DB_PORT | 数据库端口 | 5432 |
 | DB_NAME | 数据库名称 | taskflow |
-| DB_USER | 数据库用户 | - |
-| DB_PASSWORD | 数据库密码 | - |
+| WORKER_COUNT | Worker 数量 | 4 |
+| MAX_RETRIES | 最大重试次数 | 3 |
 
 ## ✅ 已完成功能
 
-### 1. SQLite 持久化层 (internal/repository/)
+### 1. Service 层 (internal/service/)
+
+完整的业务逻辑层实现：
+
+| 方法 | 描述 |
+|------|------|
+| `CreateTask` | 创建任务，支持依赖管理 |
+| `GetTask` | 获取任务 |
+| `UpdateTask` | 更新任务状态和结果 |
+| `CancelTask` | 取消任务 |
+| `RetryTask` | 重试失败任务 |
+| `ListTasks` | 分页查询任务 |
+| `SearchTasks` | 关键词搜索 |
+| `GetTaskEvents` | 获取任务事件 |
+| `StartScheduler` | 启动任务调度器 |
+| `StopScheduler` | 停止任务调度器 |
+
+### 2. 任务调度器 (internal/service/scheduler.go)
+
+| 功能 | 描述 |
+|------|------|
+| `WorkerPool` | 并发工作池，支持任务并行执行 |
+| `TrySchedule` | 依赖检查与任务调度 |
+| `executeTask` | 任务执行逻辑 |
+| `handleTaskSuccess` | 任务成功后处理 |
+| `handleTaskFailure` | 任务失败重试处理 |
+| `GetStatus` | 获取调度器状态 |
+
+### 3. 状态机 (internal/service/state_machine.go)
+
+| 方法 | 描述 |
+|------|------|
+| `CanTransition` | 检查状态转换是否有效 |
+| `Transition` | 执行状态转换 |
+| `IsTerminal` | 判断是否为终态 |
+| `GetAllowedTransitions` | 获取允许的状态转换 |
+
+**状态转换规则：**
+- `PENDING` → `RUNNING`, `CANCELLED`
+- `RUNNING` → `SUCCEEDED`, `FAILED`, `TIMEOUT`, `CANCELLED`
+- `FAILED` → `PENDING` (重试), `CANCELLED`
+- 终态 (`SUCCEEDED`, `CANCELLED`, `TIMEOUT`) 不可转换
+
+### 4. SQLite 持久化层 (internal/repository/)
 
 提供完整的 CRUD 操作：
 
@@ -118,7 +155,7 @@ go test ./...
 | `AddEvent` | 添加任务事件 |
 | `GetEventsByTaskID` | 获取任务所有事件 |
 
-### 2. 错误处理模块 (internal/error/)
+### 5. 错误处理模块 (internal/error/)
 
 完整的错误码定义和错误处理函数：
 
@@ -135,20 +172,22 @@ go test ./...
 - `HandleGinError()` / `HandleGinErrorWithCode()` - 中间件错误处理
 - `HandleGinPanic()` - Panic 恢复处理
 
-### 3. 配置系统 (internal/config/)
+### 6. 配置系统 (internal/config/)
 
 完整的配置管理：
 - 环境变量加载
 - 配置验证
 - 默认值设置
+- 支持 Server、Worker、Queue、Database 配置
 
-### 4. 数据模型 (internal/model/)
+### 7. 数据模型 (internal/model/)
 
 - Task 实体定义
+- TaskEvent 事件记录
 - TaskStatus 状态枚举
 - TaskPriority 优先级枚举
 
-### 5. Handler 层 (internal/handler/)
+### 8. Handler 层 (internal/handler/)
 
 实现 gRPC 处理器：
 - CreateTask - 创建任务
@@ -156,25 +195,18 @@ go test ./...
 - ListTasks - 批量获取任务
 - UpdateTask - 更新任务
 
-### 6. Server 层 (internal/server/)
+### 9. Server 层 (internal/server/)
 
 gRPC/HTTP 服务器：
 - gRPC 服务端
 - HTTP 网关
 - 健康检查
 
-### 7. Middleware 层 (internal/middleware/)
+### 10. Middleware 层 (internal/middleware/)
 
 通用中间件：
 - 日志中间件
 - 错误处理中间件
-
-## ⏳ 待实现功能
-
-- [ ] Service 层 (业务逻辑)
-- [ ] Scheduler (任务调度)
-- [ ] Executor (任务执行)
-- [ ] Queue (消息队列)
 
 ## 📡 API 文档
 
@@ -186,27 +218,39 @@ service TaskService {
     rpc GetTask(GetTaskRequest) returns (Task);
     rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
     rpc UpdateTask(UpdateTaskRequest) returns (Task);
-    rpc DeleteTask(DeleteTaskRequest) returns (DeleteTaskResponse);
 }
 ```
 
-### Server Stream
+### Request/Response 消息
 
-```protobuf
-rpc WatchTask(WatchTaskRequest) returns (stream TaskUpdate);
-```
+**CreateTaskRequest:**
+- name: string (required)
+- description: string
+- priority: TaskPriority
+- task_type: string
+- input_params: map<string, string>
+- dependencies: repeated string
+- max_retries: int32
+- created_by: string
 
-### Client Stream
+**GetTaskRequest:**
+- id: string (required)
+- include_events: bool
 
-```protobuf
-rpc BatchCreateTasks(stream CreateTaskRequest) returns (BatchCreateResponse);
-```
+**ListTasksRequest:**
+- page: int32
+- page_size: int32
+- status_filter: repeated TaskStatus
+- keyword: string
+- task_type: string
+- priority: TaskPriority
 
-### Bidirectional Stream
-
-```protobuf
-rpc TaskUpdates(stream TaskCommand) returns (stream TaskUpdate);
-```
+**UpdateTaskRequest:**
+- id: string (required)
+- status: TaskStatus
+- output_result: map<string, string>
+- error_message: string
+- retry_count: int32
 
 ## 📝 任务状态
 
@@ -231,12 +275,26 @@ rpc TaskUpdates(stream TaskCommand) returns (stream TaskUpdate);
 ## 🧪 测试
 
 ```bash
-# 单元测试
+# 运行所有测试
 go test ./... -v
 
-# 覆盖率
+# 覆盖率报告
 go test ./... -cover
+
+# 运行特定包测试
+go test ./internal/service -v
+
+# 运行特定测试
+go test ./internal/service -v -run TestTaskService_CreateTask
 ```
+
+### 测试覆盖
+
+| 包 | 测试数 | 描述 |
+|-----|--------|------|
+| model | 9 | 数据模型单元测试 |
+| repository | 12 | SQLite 持久化测试 |
+| service | 12 | 业务逻辑与调度器测试 |
 
 ## 📄 许可证
 
@@ -245,6 +303,15 @@ MIT
 ---
 
 ## 📌 更新日志
+
+### v0.2.0 (2026-02-19)
+- ✅ Service 层实现
+- ✅ 任务调度器 (Scheduler)
+- ✅ 工作池 (WorkerPool)
+- ✅ 状态机 (StateMachine)
+- ✅ 依赖检查器 (DependencyChecker)
+- ✅ 完整的单元测试与集成测试
+- ✅ README 文档完善
 
 ### v0.1.0 (2026-02-14)
 - ✅ 项目初始化
@@ -256,7 +323,3 @@ MIT
 - ✅ Handler 层
 - ✅ Server 层
 - ✅ Middleware 层
-- ⏳ Service 层
-- ⏳ 调度器
-- ⏳ 执行器
-- ⏳ 消息队列

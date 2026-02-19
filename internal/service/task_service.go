@@ -115,7 +115,13 @@ func (s *TaskService) CancelTask(ctx context.Context, id, operator string) error
 		return fmt.Errorf("cannot cancel terminal task")
 	}
 
-	return s.scheduler.stateMachine.Transition(task, model.TaskStatusCancelled, operator)
+	fromStatus := task.Status
+	if err := s.scheduler.stateMachine.Transition(task, model.TaskStatusCancelled, operator); err != nil {
+		return err
+	}
+
+	// 保存到数据库
+	return s.repo.UpdateStatusWithEvent(id, fromStatus, model.TaskStatusCancelled, operator, "task cancelled")
 }
 
 // RetryTask 重试任务
@@ -133,7 +139,14 @@ func (s *TaskService) RetryTask(ctx context.Context, id, operator string) error 
 	}
 
 	// 重置为 Pending 状态
-	return s.scheduler.stateMachine.Transition(task, model.TaskStatusPending, fmt.Sprintf("retry attempt %d", task.RetryCount+1))
+	fromStatus := task.Status
+	retryMsg := fmt.Sprintf("retry attempt %d", task.RetryCount+1)
+	if err := s.scheduler.stateMachine.Transition(task, model.TaskStatusPending, retryMsg); err != nil {
+		return err
+	}
+
+	// 保存到数据库
+	return s.repo.UpdateStatusWithEvent(id, fromStatus, model.TaskStatusPending, operator, retryMsg)
 }
 
 // StartScheduler 启动调度器
