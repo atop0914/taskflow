@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	path2 "path"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"taskflow/internal/handler"
 	"taskflow/internal/logger"
 	"taskflow/internal/middleware"
+	"taskflow/internal/model"
 	"taskflow/internal/repository"
 	pb "taskflow/proto"
 )
@@ -32,6 +34,7 @@ type Server struct {
 	started    bool
 	startMutex sync.Mutex
 	taskHandler *handler.TaskHandler
+	taskRepo    *repository.TaskRepository
 }
 
 // NewServer 创建服务实例
@@ -50,15 +53,17 @@ func (s *Server) Start() error {
 		return fmt.Errorf("server already started")
 	}
 
-	// 获取用户主目录
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		homeDir = "." // 如果获取失败，使用当前目录
+	// 获取数据库路径（支持环境变量 TASKFLOW_DB_PATH）
+	dbPath := s.cfg.Server.DBPath
+	// 处理用户主目录
+	if strings.HasPrefix(dbPath, "~") {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			homeDir = "."
+		}
+		dbPath = path2.Join(homeDir, strings.TrimPrefix(dbPath, "~/"))
 	}
 
-	// 初始化数据库和仓储（使用用户主目录）
-	dbPath := path2.Join(homeDir, ".taskflow", "taskflow.db")
-	
 	// 确保目录存在
 	dbDir := path2.Dir(dbPath)
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
@@ -77,6 +82,7 @@ func (s *Server) Start() error {
 	}
 
 	taskRepo := repository.NewTaskRepository(db)
+	s.taskRepo = taskRepo
 	s.taskHandler = handler.NewTaskHandler(taskRepo)
 
 	// 启动 gRPC 服务器
@@ -309,13 +315,28 @@ func (s *Server) handleUpdateTask(c *gin.Context) {
 
 // handleTaskStats 任务统计
 func (s *Server) handleTaskStats(c *gin.Context) {
+	// 获取各状态的任务数量
+	pending := model.TaskStatusPending
+	running := model.TaskStatusRunning
+	succeeded := model.TaskStatusSucceeded
+	failed := model.TaskStatusFailed
+	cancelled := model.TaskStatusCancelled
+
+	pendingCount, _ := s.taskRepo.Count(&pending)
+	runningCount, _ := s.taskRepo.Count(&running)
+	succeededCount, _ := s.taskRepo.Count(&succeeded)
+	failedCount, _ := s.taskRepo.Count(&failed)
+	cancelledCount, _ := s.taskRepo.Count(&cancelled)
+
+	total := pendingCount + runningCount + succeededCount + failedCount + cancelledCount
+
 	c.JSON(200, gin.H{
-		"total":      0,
-		"pending":    0,
-		"running":    0,
-		"succeeded":  0,
-		"failed":     0,
-		"cancelled":  0,
+		"total":      total,
+		"pending":    pendingCount,
+		"running":    runningCount,
+		"succeeded":  succeededCount,
+		"failed":     failedCount,
+		"cancelled":  cancelledCount,
 	})
 }
 

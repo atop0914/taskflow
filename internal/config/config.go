@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 // 端口范围常量
@@ -18,8 +20,9 @@ const (
 // 默认配置常量
 const (
 	// Server defaults
-	DefaultGRPCPort     = "8080"
-	DefaultHTTPPort     = "8090"
+	DefaultGRPCPort     = "9000"
+	DefaultHTTPPort     = "9001"
+	DefaultDBPath       = "~/.taskflow/taskflow.db"
 	DefaultTimeout      = 30  // seconds
 	DefaultMaxConns     = 1000
 	DefaultLogLevel     = "info"
@@ -50,10 +53,11 @@ const (
 type ServerConfig struct {
 	GRPCPort    string `yaml:"grpc_port" env:"GRPC_PORT"`       // gRPC服务端口 (1-65535)
 	HTTPPort    string `yaml:"http_port" env:"HTTP_PORT"`       // HTTP服务端口 (1-65535)
+	DBPath      string `yaml:"db_path" env:"TASKFLOW_DB_PATH"`  // 数据库文件路径
 	EnableDebug bool   `yaml:"enable_debug" env:"ENABLE_DEBUG"` // 启用调试模式
-	Timeout     int    `yaml:"timeout" env:"SERVER_TIMEOUT"`   // 请求超时时间（秒），默认30秒
+	Timeout     int    `yaml:"timeout" env:"SERVER_TIMEOUT"`     // 请求超时时间（秒），默认30秒
 	MaxConns    int    `yaml:"max_conns" env:"MAX_CONNECTIONS"` // 最大连接数，默认1000
-	LogLevel    string `yaml:"log_level" env:"LOG_LEVEL"`      // 日志级别：debug, info, warn, error
+	LogLevel    string `yaml:"log_level" env:"LOG_LEVEL"`       // 日志级别：debug, info, warn, error
 }
 
 // FeatureFlags 功能开关
@@ -125,11 +129,78 @@ type Config struct {
 
 // LoadConfig 加载配置（支持环境变量覆盖）
 // 环境变量优先级高于配置文件默认值
+// InitViper 初始化 Viper 配置（支持 .env 和 config.yaml）
+func InitViper() *viper.Viper {
+	v := viper.New()
+
+	// 设置配置文件名
+	v.SetConfigName("config")
+	v.SetConfigType("yaml")
+
+	// 添加配置文件路径
+	v.AddConfigPath(".")
+	v.AddConfigPath("$HOME/.taskflow")
+	v.AddConfigPath("/etc/taskflow")
+
+	// 优先从环境变量读取（环境变量优先级最高）
+	// TASKFLOW_GRPC_ADDR 和 TASKFLOW_HTTP_ADDR 格式为 ":port"
+	v.SetEnvPrefix("TASKFLOW")
+	v.BindEnv("GRPC_ADDR")
+	v.BindEnv("HTTP_ADDR")
+	v.BindEnv("DB_PATH")
+
+	// 自动加载环境变量（支持 .env 文件）
+	v.AutomaticEnv()
+
+	// 尝试读取配置文件（如果存在）
+	_ = v.ReadInConfig()
+
+	return v
+}
+
+// LoadConfig 加载配置（支持环境变量覆盖）
+// 环境变量优先级高于配置文件默认值
 func LoadConfig() *Config {
+	// 初始化 viper
+	v := InitViper()
+
+	// 从环境变量或 viper 获取配置
+	grpcAddr := getEnv("TASKFLOW_GRPC_ADDR", "")
+	httpAddr := getEnv("TASKFLOW_HTTP_ADDR", "")
+	dbPath := getEnv("TASKFLOW_DB_PATH", "")
+
+	// 解析地址获取端口
+	grpcPort := DefaultGRPCPort
+	httpPort := DefaultHTTPPort
+
+	if grpcAddr != "" {
+		grpcPort = strings.TrimPrefix(grpcAddr, ":")
+	}
+	if httpAddr != "" {
+		httpPort = strings.TrimPrefix(httpAddr, ":")
+	}
+
+	// 如果 viper 中有配置，使用 viper 的值
+	if v.IsSet("server.grpc_port") {
+		grpcPort = v.GetString("server.grpc_port")
+	}
+	if v.IsSet("server.http_port") {
+		httpPort = v.GetString("server.http_port")
+	}
+	if v.IsSet("server.db_path") {
+		dbPath = v.GetString("server.db_path")
+	}
+
+	// 如果没有设置 DBPath，使用默认值
+	if dbPath == "" {
+		dbPath = DefaultDBPath
+	}
+
 	cfg := &Config{
 		Server: ServerConfig{
-			GRPCPort:    getEnv("GRPC_PORT", DefaultGRPCPort),
-			HTTPPort:    getEnv("HTTP_PORT", DefaultHTTPPort),
+			GRPCPort:    grpcPort,
+			HTTPPort:    httpPort,
+			DBPath:      dbPath,
 			EnableDebug: getEnvBool("ENABLE_DEBUG"),
 			Timeout:     getEnvInt("SERVER_TIMEOUT", DefaultTimeout),
 			MaxConns:    getEnvInt("MAX_CONNECTIONS", DefaultMaxConns),

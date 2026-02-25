@@ -1,0 +1,59 @@
+# TaskFlow Configuration Example
+# Copy this file to config.yaml and modify as needed
+
+server:
+  grpc_port: "9000"
+  http_port: "9001"
+  enable_debug: false
+  timeout: 30
+  max_conns: 1000
+  log_level: info
+
+features:
+  enable_reflection: false
+  enable_stats: true
+  enable_metrics: true
+  max_greetings: 100
+
+worker:
+  count: 4
+  queue_size: 1000
+  retry_max: 3
+  retry_delay: 5
+  timeout: 300
+  batch_size: 10
+  auto_scale: false
+  min_scale: 4
+  max_scale: 8
+  heartbeat: 30
+
+queue:
+  name: default
+  prefetch: 10
+  timeout: 300
+  max_length: 0
+  priority: 5
+  durable: false
+  auto_delete: false
+  exchange: ""
+  routing_key: ""
+  dead_letter_exchange: ""
+  dead_letter_queue: ""
+  ttl: 0
+
+database:
+  host: localhost
+  port: "5432"
+  name: taskflow
+  user: ""
+  password: ""
+  ssl_mode: disable
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: 300
+  conn_max_idle_time: 60
+  max_retries: 3
+  retry_delay: 100
+  table_prefix: ""
+  pool_size: 25
+  min_idle_conns: 5

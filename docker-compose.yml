@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  taskflow-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taskflow-server
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - TASKFLOW_GRPC_ADDR=:9000
+      - TASKFLOW_HTTP_ADDR=:9001
+      - TASKFLOW_DB_PATH=/data/taskflow.db
+      - LOG_LEVEL=info
+      - ENABLE_DEBUG=false
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - taskflow-network
+
+networks:
+  taskflow-network:
+    driver: bridge
